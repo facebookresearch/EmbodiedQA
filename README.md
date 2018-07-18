@@ -42,7 +42,7 @@ pip install -r requirements.txt
 
 Download the [SUNCG dataset](https://github.com/facebookresearch/House3D/blob/master/INSTRUCTION.md#usage-instructions) and [install House3D](https://github.com/facebookresearch/House3D/tree/master/renderer#rendering-code-of-house3d).
 
-Note: This code uses a [fork of House3D](https://github.com/abhshkdz/house3d) with a few changes to support arbitrary map discretization resolutions.
+NOTE: This code uses a [fork of House3D](https://github.com/abhshkdz/house3d) with a few changes to support arbitrary map discretization resolutions.
 
 ## Question generation
 
@@ -106,6 +106,18 @@ Download [EQA v1][eqav1] and shortest path navigations:
 wget https://www.dropbox.com/s/6zu1b1jzl0qt7t1/eqa_v1.json
 wget https://www.dropbox.com/s/vgp2ygh1bht1jyb/shortest-paths.zip
 unzip shortest-paths.zip
+```
+
+If this is the first time you are using SUNCG, you will have to clone and use the
+[SUNCG toolbox](https://github.com/shurans/SUNCGtoolbox#convert-to-objmtl)
+to generate obj + mtl files for the houses in EQA.
+
+```
+cd utils
+python make_houses.py \
+    -eqa_path /path/to/eqa.json \
+    -suncg_toolbox_path /path/to/SUNCGtoolbox \
+    -suncg_data_path /path/to/suncg/data_root
 ```
 
 Preprocess the dataset for training
