@@ -42,6 +42,8 @@ pip install -r requirements.txt
 
 Download the [SUNCG dataset](https://github.com/facebookresearch/House3D/blob/master/INSTRUCTION.md#usage-instructions) and [install House3D](https://github.com/facebookresearch/House3D/tree/master/renderer#rendering-code-of-house3d).
 
+Note: This code uses a [fork of House3D](https://github.com/abhshkdz/house3d) with a few changes to support arbitrary map discretization resolutions.
+
 ## Question generation
 
 Questions for EmbodiedQA are generated programmatically, in a manner similar to [CLEVR (Johnson et al., 2017)][clevr].
