@@ -719,7 +719,7 @@ class NavPlannerControllerModel(nn.Module):
         self.planner_nav_rnn = NavRnn(
             image_input=True,
             image_feat_dim=planner_rnn_image_feat_dim,
-            question_input=question_hidden_dim,
+            question_input=True,
             question_embed_dim=question_hidden_dim,
             action_input=True,
             action_embed_dim=planner_rnn_action_embed_dim,
