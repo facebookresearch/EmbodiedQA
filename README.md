@@ -175,9 +175,9 @@ python train_eqa.py -to_log 1 \
 
 ### 09/07
 
-We added the baseline models from the CVPR paper (Reactive and LSTM).
-With the LSTM model, we achieved d_T values of: 0.74693/3.99891/8.10669 on the test set for d equal to 10/30/50 respectively training with behavior cloning (no reinforcement learning).
-We also updated the shortest paths to fix an issue with the shortest path algorithm we initially used.  Code to generate shortest paths is [here](https://github.com/facebookresearch/EmbodiedQA/blob/master/data/shortest-path-gen/generate-paths-a-star.py).
+- We added the baseline models from the CVPR paper (Reactive and LSTM).
+- With the LSTM model, we achieved d_T values of: 0.74693/3.99891/8.10669 on the test set for d equal to 10/30/50 respectively training with behavior cloning (no reinforcement learning).
+- We also updated the shortest paths to fix an issue with the shortest path algorithm we initially used.  Code to generate shortest paths is [here](https://github.com/facebookresearch/EmbodiedQA/blob/master/data/shortest-path-gen/generate-paths-a-star.py).
 
 ### 06/13
 
