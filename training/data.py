@@ -1,12 +1,7 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
 import math
 import time
 import h5py
+import logging
 import argparse
 import numpy as np
 import os, sys, json
@@ -19,6 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataloader import default_collate
 from torch.autograd import Variable
 
+sys.path.insert(0, '../../House3D/')
 from House3D import objrender, Environment, load_config
 from House3D.core import local_create_house
 
@@ -28,7 +24,6 @@ from house3d import House3DUtils
 from models import MultitaskCNN
 
 import pdb
-
 
 def load_vocab(path):
     with open(path, 'r') as f:
@@ -55,10 +50,10 @@ output sequence for planner is [f, l, f, r, <end>]
 input sequences to controller are [f, f, l, l, f, f, f, r]
 output sequences for controller are [1, 0, 1, 0, 1, 1, 0, 0]
 """
-def flat_to_hierarchical_actions(actions=[]):
+def flat_to_hierarchical_actions(actions, controller_action_lim):
     assert len(actions) != 0
 
-    controller_action_ctr, controller_action_lim = 0, 5
+    controller_action_ctr = 0
 
     planner_actions, controller_actions = [1], []
     prev_action = 1
@@ -147,10 +142,15 @@ class EqaDataset(Dataset):
                  max_threads_per_gpu=10,
                  to_cache=False,
                  target_obj_conn_map_dir=False,
-                 map_resolution=1000):
+                 map_resolution=1000,
+                 overfit=False,
+                 max_controller_actions=5,
+                 max_actions=None):
+
         self.questions_h5 = questions_h5
         self.vocab = load_vocab(vocab)
         self.num_frames = num_frames
+        self.max_controller_actions = max_controller_actions
 
         np.random.seed()
 
@@ -164,9 +164,30 @@ class EqaDataset(Dataset):
 
         self.target_obj_conn_map_dir = target_obj_conn_map_dir
         self.map_resolution = map_resolution
+        self.overfit = overfit
 
         self.to_cache = to_cache
         self.img_data_cache = {}
+
+        print('Reading question data into memory')
+        self.idx = _dataset_to_tensor(questions_h5['idx'])
+        self.questions = _dataset_to_tensor(questions_h5['questions'])
+        self.answers = _dataset_to_tensor(questions_h5['answers'])
+        self.actions = _dataset_to_tensor(questions_h5['action_labels'])
+        self.action_lengths = _dataset_to_tensor(
+            questions_h5['action_lengths'])
+
+        if max_actions: #max actions will allow us to create arrays of a certain length.  Helpful if you only want to train with 10 actions.
+            assert isinstance(max_actions, int)
+            num_data_items = self.actions.shape[0]
+            new_actions = np.zeros((num_data_items, max_actions+2), dtype=np.int64)
+            new_lengths = np.ones((num_data_items,), dtype=np.int64)*max_actions
+            for i in range(num_data_items):
+                action_length = int(self.action_lengths[i])
+                new_actions[i,0] = 1
+                new_actions[i,1:max_actions+1] = self.actions[i, action_length-max_actions: action_length].numpy() 
+            self.actions = torch.LongTensor(new_actions)
+            self.action_lengths = torch.LongTensor(new_lengths)
 
         if self.data_json != False:
             data = json.load(open(self.data_json, 'r'))
@@ -176,6 +197,12 @@ class EqaDataset(Dataset):
             self.env_list = [self.envs[x] for x in self.env_idx]
             self.env_set = list(set(self.env_list))
             self.env_set.sort()
+
+            if self.overfit == True:
+                self.env_idx = self.env_idx[:1]
+                self.env_set = self.env_list = [self.envs[x] for x in self.env_idx]
+                print('Trying to overfit to [house %s]' % self.env_set[0])
+                logging.info('Trying to overfit to [house {}]'.format(self.env_set[0]))
 
             print('Total envs: %d' % len(list(set(self.envs))))
             print('Envs in %s: %d' % (self.split,
@@ -204,13 +231,9 @@ class EqaDataset(Dataset):
             self.pos_queue = data[self.split + '_pos_queue']
             self.boxes = data[self.split + '_boxes']
 
-        print('Reading question data into memory')
-        self.idx = _dataset_to_tensor(questions_h5['idx'])
-        self.questions = _dataset_to_tensor(questions_h5['questions'])
-        self.answers = _dataset_to_tensor(questions_h5['answers'])
-        self.actions = _dataset_to_tensor(questions_h5['action_labels'])
-        self.action_lengths = _dataset_to_tensor(
-            questions_h5['action_lengths'])
+            if max_actions:
+                for i in range(len(self.pos_queue)):
+                    self.pos_queue[i] = self.pos_queue[i][-1*max_actions:] 
 
         if input_type == 'pacman':
 
@@ -228,7 +251,9 @@ class EqaDataset(Dataset):
             # parsing flat actions to planner-controller hierarchy
             for i in tqdm(range(len(self.actions))):
 
-                pa, ca, pq_idx, cq_idx, ph_idx = flat_to_hierarchical_actions(self.actions[i][:self.action_lengths[i]+1])
+                pa, ca, pq_idx, cq_idx, ph_idx = flat_to_hierarchical_actions(
+                    actions=self.actions[i][:self.action_lengths[i]+1],
+                    controller_action_lim=max_controller_actions)
 
                 self.planner_actions[i][:len(pa)] = torch.Tensor(pa)
                 self.controller_actions[i][:len(ca)] = torch.Tensor(ca)
@@ -259,6 +284,7 @@ class EqaDataset(Dataset):
         return pruned_env_set
 
     def _load_envs(self, start_idx=-1, in_order=False):
+        #self._clear_memory()
         if start_idx == -1:
             start_idx = self.env_set.index(self.pruned_env_set[-1]) + 1
 
@@ -275,12 +301,15 @@ class EqaDataset(Dataset):
         # Load api threads
         start = time.time()
         if len(self.api_threads) == 0:
-            for i in range(len(self.pruned_env_set)):
+            for i in range(self.max_threads_per_gpu):
                 self.api_threads.append(
                     objrender.RenderAPIThread(
                         w=224, h=224, device=self.gpu_id))
 
-        self.cfg = load_config('../House3D/tests/config.json')
+        try:
+            self.cfg = load_config('../House3D/tests/config.json')
+        except:
+            self.cfg = load_config('../../House3D/tests/config.json') #Sorry guys; this is so Lisa can run on her system; maybe we should make this an input somewhere?
 
         print('[%.02f] Loaded %d api threads' % (time.time() - start,
                                                  len(self.api_threads)))
@@ -303,8 +332,9 @@ class EqaDataset(Dataset):
             print('[%02d/%d][split:%s][gpu:%d][house:%s]' %
                   (i + 1, len(self.all_houses), self.split, self.gpu_id,
                    self.all_houses[i].house['id']))
+            environment = Environment(self.api_threads[i], self.all_houses[i], self.cfg)
             self.env_loaded[self.all_houses[i].house['id']] = House3DUtils(
-                Environment(self.api_threads[i], self.all_houses[i], self.cfg),
+                environment,
                 target_obj_conn_map_dir=self.target_obj_conn_map_dir,
                 build_graph=False)
 
@@ -318,6 +348,14 @@ class EqaDataset(Dataset):
         self.available_idx = [
             i for i, v in enumerate(self.env_list) if v in self.env_loaded
         ]
+
+        # [TODO] only keeping legit sequences
+        # needed for things to play well with old data
+        temp_available_idx = self.available_idx.copy()
+        for i in range(len(temp_available_idx)):
+            if self.action_lengths[temp_available_idx[i]] < 5:
+                self.available_idx.remove(temp_available_idx[i])
+
         print('Available inds: %d' % len(self.available_idx))
 
         # Flag to check if loaded envs have been cycled through or not
@@ -327,6 +365,15 @@ class EqaDataset(Dataset):
     def _clear_api_threads(self):
         for i in range(len(self.api_threads)):
             del self.api_threads[0]
+        self.api_threads = []
+
+    def _clear_memory(self):
+        if hasattr(self, 'episode_house'):
+            del self.episode_house
+        if hasattr(self, 'env_loaded'):
+            del self.env_loaded
+        if hasattr(self, 'api_threads'):
+            del self.api_threads
         self.api_threads = []
 
     def _check_if_all_envs_loaded(self):
@@ -368,10 +415,22 @@ class EqaDataset(Dataset):
 
         return np.array(res)
 
-    def get_hierarchical_features_till_spawn(self, actions, backtrack_steps=0):
+    def get_hierarchical_features_till_spawn(self, actions, backtrack_steps=0, max_controller_actions=5):
 
         action_length = len(actions)-1
-        pa, ca, pq_idx, cq_idx, ph_idx = flat_to_hierarchical_actions(actions)
+        pa, ca, pq_idx, cq_idx, ph_idx = flat_to_hierarchical_actions(
+            actions=actions,
+            controller_action_lim=max_controller_actions)
+        
+        # count how many actions of same type have been encountered pefore starting navigation
+        backtrack_controller_steps = actions[1:action_length - backtrack_steps + 1:][::-1]
+        counter = 0 
+        try:
+            if len(backtrack_controller_steps) > 0:
+                while (counter <= self.max_controller_actions) and (backtrack_controller_steps[counter] == backtrack_controller_steps[0]) and (counter <= len(backtrack_controller_steps)):
+                    counter += 1
+        except:
+            import pdb; pdb.set_trace() #If you have breakpoint here, you probably found an error in the logit above to figure out the correct counter step.  Still working on this and checking. 
 
         target_pos_idx = action_length - backtrack_steps
 
@@ -390,16 +449,14 @@ class EqaDataset(Dataset):
             Variable(torch.FloatTensor(images)
                      .cuda())).data.cpu().numpy().copy()
 
-        controller_img_feat, controller_action_in = False, False
-        if controller_step == True:
-            controller_img_feat = torch.from_numpy(raw_img_feats[target_pos_idx].copy())
-            controller_action_in = pa_pruned[-1] - 2
+        controller_img_feat = torch.from_numpy(raw_img_feats[target_pos_idx].copy())
+        controller_action_in = pa_pruned[-1] - 2
 
         planner_img_feats = torch.from_numpy(raw_img_feats[pq_idx_pruned].copy())
         planner_actions_in = torch.from_numpy(np.array(pa_pruned[:-1]) - 1)
 
-        return planner_actions_in, planner_img_feats, controller_step, controller_action_in, controller_img_feat, self.episode_pos_queue[target_pos_idx]
-
+        return planner_actions_in, planner_img_feats, controller_step, controller_action_in, \
+            controller_img_feat, self.episode_pos_queue[target_pos_idx], counter
 
     def __getitem__(self, index):
         # [VQA] question-only
@@ -726,6 +783,14 @@ class EqaDataset(Dataset):
             if len(controller_out) > controller_action_length:
                 controller_out[controller_action_length:].fill_(0)
 
+            # zero out forced controller return
+            for i in range(controller_action_length):
+                if i >= self.max_controller_actions - 1 and controller_out[i] == 0 and \
+                        (self.max_controller_actions == 1 or
+                         controller_out[i - self.max_controller_actions + 1:i].sum()
+                         == self.max_controller_actions - 1):
+                    controller_mask[i] = 0
+                    
             return (idx, question, answer, planner_img_feats,
                     planner_actions_in, planner_actions_out,
                     planner_action_length, planner_mask, controller_img_feats,
@@ -788,6 +853,21 @@ class EqaDataLoader(DataLoader):
         elif 'lstm' in input_type:
             kwargs['collate_fn'] = eqaCollateSeq2seq
 
+        if 'overfit' in kwargs:
+            overfit = kwargs.pop('overfit')
+        else:
+            overfit = False
+
+        if 'max_controller_actions' in kwargs:
+            max_controller_actions = kwargs.pop('max_controller_actions')
+        else:
+            max_controller_actions = 5
+
+        if 'max_actions' in kwargs:
+            max_actions = kwargs.pop('max_actions')
+        else:
+            max_actions = None 
+
         print('Reading questions from ', questions_h5_path)
         with h5py.File(questions_h5_path, 'r') as questions_h5:
             self.dataset = EqaDataset(
@@ -801,7 +881,10 @@ class EqaDataLoader(DataLoader):
                 max_threads_per_gpu=max_threads_per_gpu,
                 to_cache=to_cache,
                 target_obj_conn_map_dir=target_obj_conn_map_dir,
-                map_resolution=map_resolution)
+                map_resolution=map_resolution,
+                overfit=overfit,
+                max_controller_actions=max_controller_actions,
+                max_actions=max_actions)
 
         super(EqaDataLoader, self).__init__(self.dataset, **kwargs)
 
