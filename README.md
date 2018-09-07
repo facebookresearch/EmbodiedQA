@@ -104,13 +104,15 @@ Download [EQA v1][eqav1] and shortest path navigations:
 
 ```
 wget https://www.dropbox.com/s/6zu1b1jzl0qt7t1/eqa_v1.json
-wget https://www.dropbox.com/s/vgp2ygh1bht1jyb/shortest-paths.zip
-unzip shortest-paths.zip
+https://www.dropbox.com/s/lhajthx7cdlnhns/a-star-500.zip
+unzip a-star-500.zip
 ```
 
 If this is the first time you are using SUNCG, you will have to clone and use the
 [SUNCG toolbox](https://github.com/shurans/SUNCGtoolbox#convert-to-objmtl)
 to generate obj + mtl files for the houses in EQA.
+
+NOTE: Shortest paths have been updated.  Earlier we computed shortest paths using a discrete grid world, but we found that these shortest paths were sometimes innacurate.  Old shortest paths are [here] (https://www.dropbox.com/s/vgp2ygh1bht1jyb/shortest-paths.zip)
 
 ```
 cd utils
@@ -125,7 +127,7 @@ Preprocess the dataset for training
 
 ```
 cd training
-python utils/preprocess_questions.py \
+python utils/preprocess_questions_pkl.py \
     -input_json /path/to/eqa_v1.json \
     -shortest_path_dir /path/to/shortest/paths/v3 \
     -output_train_h5 data/train.h5 \
@@ -175,6 +177,7 @@ python train_eqa.py -to_log 1 \
 
 We added the baseline models from the CVPR paper (Reactive and LSTM).
 With the LSTM model, we achieved d_T values of: 0.74693/3.99891/8.10669 on the test set for d equal to 10/30/50 respectively training with behavior cloning (no reinforcement learning).
+We also updated the shortest paths to fix an issue with the shortest path algorithm we initially used.  Code to generate shortest paths is [here](https://github.com/facebookresearch/EmbodiedQA/blob/master/data/shortest-path-gen/generate-paths-a-star.py).
 
 ### 06/13
 
