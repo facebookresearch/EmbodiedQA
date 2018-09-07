@@ -171,6 +171,11 @@ python train_eqa.py -to_log 1 \
 
 ## Changelog
 
+###09/07
+
+We added the baseline models from the CVPR paper (Reactive and LSTM).
+With the LSTM model, we achieved d_T values of: 0.74693/3.99891/8.10669 on the test set for d equal to 10/30/50 respectively training with behavior cloning (no reinforcement learning).
+
 ### 06/13
 
 This code release contains the following changes over the CVPR version
