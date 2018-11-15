@@ -425,12 +425,10 @@ class EqaDataset(Dataset):
         # count how many actions of same type have been encountered pefore starting navigation
         backtrack_controller_steps = actions[1:action_length - backtrack_steps + 1:][::-1]
         counter = 0 
-        try:
-            if len(backtrack_controller_steps) > 0:
-                while (counter <= self.max_controller_actions) and (backtrack_controller_steps[counter] == backtrack_controller_steps[0]) and (counter <= len(backtrack_controller_steps)):
-                    counter += 1
-        except:
-            import pdb; pdb.set_trace() #If you have breakpoint here, you probably found an error in the logit above to figure out the correct counter step.  Still working on this and checking. 
+
+        if len(backtrack_controller_steps) > 0:
+            while (counter <= self.max_controller_actions) and (counter < len(backtrack_controller_steps) and (backtrack_controller_steps[counter] == backtrack_controller_steps[0])):
+                counter += 1 
 
         target_pos_idx = action_length - backtrack_steps
 
