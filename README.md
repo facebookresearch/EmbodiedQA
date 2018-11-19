@@ -40,7 +40,7 @@ source .env/bin/activate
 pip install -r requirements.txt
 ```
 
-Download the [SUNCG dataset](https://github.com/facebookresearch/House3D/blob/master/INSTRUCTION.md#usage-instructions) and [install House3D](https://github.com/facebookresearch/House3D/tree/master/renderer#rendering-code-of-house3d).
+Download the [SUNCG v1 dataset](https://github.com/facebookresearch/House3D/blob/master/INSTRUCTION.md#usage-instructions) and [install House3D](https://github.com/abhshkdz/House3D/tree/master/renderer#rendering-code-of-house3d).
 
 NOTE: This code uses a [fork of House3D](https://github.com/abhshkdz/house3d) with a few changes to support arbitrary map discretization resolutions.
 
@@ -104,7 +104,7 @@ Download [EQA v1][eqav1] and shortest path navigations:
 
 ```
 wget https://www.dropbox.com/s/6zu1b1jzl0qt7t1/eqa_v1.json
-https://www.dropbox.com/s/lhajthx7cdlnhns/a-star-500.zip
+wget https://www.dropbox.com/s/lhajthx7cdlnhns/a-star-500.zip
 unzip a-star-500.zip
 ```
 
@@ -112,7 +112,7 @@ If this is the first time you are using SUNCG, you will have to clone and use th
 [SUNCG toolbox](https://github.com/shurans/SUNCGtoolbox#convert-to-objmtl)
 to generate obj + mtl files for the houses in EQA.
 
-NOTE: Shortest paths have been updated.  Earlier we computed shortest paths using a discrete grid world, but we found that these shortest paths were sometimes innacurate.  Old shortest paths are [here] (https://www.dropbox.com/s/vgp2ygh1bht1jyb/shortest-paths.zip)
+NOTE: Shortest paths have been updated.  Earlier we computed shortest paths using a discrete grid world, but we found that these shortest paths were sometimes innacurate.  Old shortest paths are [here](https://www.dropbox.com/s/vgp2ygh1bht1jyb/shortest-paths.zip).
 
 ```
 cd utils
@@ -129,7 +129,7 @@ Preprocess the dataset for training
 cd training
 python utils/preprocess_questions_pkl.py \
     -input_json /path/to/eqa_v1.json \
-    -shortest_path_dir /path/to/shortest/paths/v3 \
+    -shortest_path_dir /path/to/shortest/paths/a-star-500 \
     -output_train_h5 data/train.h5 \
     -output_val_h5 data/val.h5 \
     -output_test_h5 data/test.h5 \
@@ -141,7 +141,7 @@ python utils/preprocess_questions_pkl.py \
 
 Update pretrained CNN path in `models.py`.
 
-`python train_vqa.py -to_log 1 -input_type ques,image -identifier ques-image`
+`python train_vqa.py -input_type ques,image -identifier ques-image -log -cache`
 
 This model computes question-conditioned attention over last 5 frames from oracle navigation (shortest paths),
 and predicts answer. Assuming shortest paths are optimal for answering the question -- which is predominantly
@@ -149,6 +149,10 @@ true for most questions in EQA v1 (`location`, `color`, `place preposition`) wit
 exception of a few `location` questions that might need more visual context than walking right up till the object --
 this can be thought of as an upper bound on expected accuracy, and performance will get worse when navigation
 trajectories are sampled from trained policies.
+
+A pretrained VQA model is available for download [here](https://www.dropbox.com/s/jd15af00r7m8neh/vqa_11_18_2018_va0.6154.pt). This gets a top-1 accuracy of 61.54% on val, and 58.46% on test (with GT navigation).
+
+Note that keeping the `cache` flag ON caches images as they are rendered in the first training epoch, so that subsequent epochs are very fast. This is memory-intensive though, and consumes ~100-120G RAM.
 
 ### Navigation
 

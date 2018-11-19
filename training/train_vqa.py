@@ -51,7 +51,7 @@ def eval(rank, args, shared_model):
         'split': args.eval_split,
         'max_threads_per_gpu': args.max_threads_per_gpu,
         'gpu_id': args.gpus[rank%len(args.gpus)],
-        'to_cache': args.to_cache
+        'to_cache': args.cache
     }
 
     eval_loader = EqaDataLoader(**eval_loader_kwargs)
@@ -134,7 +134,7 @@ def eval(rank, args, shared_model):
         # checkpoint if best val accuracy
         if metrics.metrics[1][0] > best_eval_acc:
             best_eval_acc = metrics.metrics[1][0]
-            if epoch % args.eval_every == 0 and args.to_log == 1:
+            if epoch % args.eval_every == 0 and args.log == True:
                 metrics.dump_log()
 
                 model_state = get_state(model)
@@ -184,7 +184,7 @@ def train(rank, args, shared_model):
         'split': 'train',
         'max_threads_per_gpu': args.max_threads_per_gpu,
         'gpu_id': args.gpus[rank%len(args.gpus)],
-        'to_cache': args.to_cache
+        'to_cache': args.cache
     }
 
     args.output_log_path = os.path.join(args.log_dir,
@@ -239,7 +239,7 @@ def train(rank, args, shared_model):
 
                 if t % args.print_every == 0:
                     print(metrics.get_stat_string())
-                    if args.to_log == 1:
+                    if args.log == True:
                         metrics.dump_log()
 
         elif args.input_type == 'ques,image':
@@ -255,6 +255,7 @@ def train(rank, args, shared_model):
 
                     model.load_state_dict(shared_model.state_dict())
                     model.train()
+                    model.cnn.eval()
                     model.cuda()
 
                     idx, questions, answers, images, _, _, _ = batch
@@ -281,10 +282,12 @@ def train(rank, args, shared_model):
 
                     if t % args.print_every == 0:
                         print(metrics.get_stat_string())
-                        if args.to_log == 1:
+                        if args.log == True:
                             metrics.dump_log()
 
                 if all_envs_loaded == False:
+                    print('[CHECK][Cache:%d][Total:%d]' % (len(train_loader.dataset.img_data_cache),
+                        len(train_loader.dataset.env_list)))
                     train_loader.dataset._load_envs(in_order=True)
                     if len(train_loader.dataset.pruned_env_set) == 0:
                         done = True
@@ -332,8 +335,8 @@ if __name__ == '__main__':
     parser.add_argument('-checkpoint_path', default=False)
     parser.add_argument('-checkpoint_dir', default='checkpoints/vqa/')
     parser.add_argument('-log_dir', default='logs/vqa/')
-    parser.add_argument('-to_log', default=0, type=int)
-    parser.add_argument('-to_cache', default=True, type=bool)
+    parser.add_argument('-log', default=False, action='store_true')
+    parser.add_argument('-cache', default=False, action='store_true')
     args = parser.parse_args()
 
     args.time_id = time.strftime("%m_%d_%H:%M")
@@ -365,7 +368,7 @@ if __name__ == '__main__':
 
     print(args.__dict__)
 
-    if not os.path.exists(args.checkpoint_dir) and args.to_log == 1:
+    if not os.path.exists(args.checkpoint_dir) and args.log == True:
         os.makedirs(args.checkpoint_dir)
         os.makedirs(args.log_dir)
 
