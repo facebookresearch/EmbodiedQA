@@ -272,6 +272,8 @@ class MultitaskCNN(nn.Module):
 
     def forward(self, x):
 
+        assert self.training == False
+
         conv1 = self.conv_block1(x)
         conv2 = self.conv_block2(conv1)
         conv3 = self.conv_block3(conv2)
