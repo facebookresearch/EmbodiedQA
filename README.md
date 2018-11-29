@@ -164,15 +164,16 @@ wget https://www.dropbox.com/s/53edqtr04jts4q0/target-obj-conn-maps-500.zip
 
 #### Planner-controller policy
 
-`python train_nav.py -to_log 1 -model_type pacman -identifier pacman`
+`python train_nav.py -model_type pacman -identifier pacman -log`
 
 ## REINFORCE
 
 ```
-python train_eqa.py -to_log 1 \
+python train_eqa.py \
     -nav_checkpoint_path /path/to/nav/ques-image-pacman/checkpoint.pt \
     -ans_checkpoint_path /path/to/vqa/ques-image/checkpoint.pt \
-    -identifier ques-image-eqa
+    -identifier ques-image-eqa \
+    -log
 ```
 
 ## Changelog

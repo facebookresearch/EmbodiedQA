@@ -535,14 +535,14 @@ def eval(rank, args, shared_model):
                             controller_img_feats, init_pos,
                             controller_action_counter
                         ) = eval_loader.dataset.get_hierarchical_features_till_spawn(
-                            actions[0, :action_length[0] + 1].numpy(), i, args.max_controller_actions 
+                            actions[0, :action_length[0] + 1].numpy(), i, args.max_controller_actions
                         )
 
                         planner_actions_in_var = Variable(
                             planner_actions_in.cuda())
                         planner_img_feats_var = Variable(
                             planner_img_feats.cuda())
-                    
+
                         # forward planner till spawn to update hidden state
                         for step in range(planner_actions_in.size(0)):
 
@@ -569,7 +569,7 @@ def eval(rank, args, shared_model):
 
                         episode_length = 0
                         if args.max_controller_actions > 1:
-                            controller_action_counter = controller_action_counter % args.max_controller_actions 
+                            controller_action_counter = controller_action_counter % args.max_controller_actions
                             controller_action_counter = max(controller_action_counter - 1, 0)
                         else:
                             controller_action_counter = 0
@@ -597,7 +597,7 @@ def eval(rank, args, shared_model):
                                 controller_scores = model.controller_step(
                                     img_feat_var, controller_action_in,
                                     planner_hidden[0])
-                                
+
                                 prob = F.softmax(controller_scores, dim=1)
                                 controller_action = int(
                                     prob.max(1)[1].data.cpu().numpy()[0])
@@ -609,7 +609,7 @@ def eval(rank, args, shared_model):
                                     controller_action_counter = 0
                                     planner_step = True
                                     controller_action = 0
-                            
+
                                 controller_actions.append(controller_action)
                                 first_step = False
 
@@ -620,7 +620,7 @@ def eval(rank, args, shared_model):
                                     planner_scores, planner_hidden = model.planner_step(
                                         question_var, img_feat_var,
                                         Variable(action_in), planner_hidden)
-    
+
                                 prob = F.softmax(planner_scores, dim=1)
                                 action = int(
                                     prob.max(1)[1].data.cpu().numpy()[0])
@@ -635,7 +635,7 @@ def eval(rank, args, shared_model):
                                 h3d.env.cam.pos.x, h3d.env.cam.pos.y,
                                 h3d.env.cam.pos.z, h3d.env.cam.yaw
                             ])
-                            
+
                             if episode_done:
                                 break
 
@@ -685,7 +685,7 @@ def eval(rank, args, shared_model):
                     logging.info("EVAL: metrics: {}".format(metrics.get_stat_string(mode=0)))
                 except:
                     pass
-                
+
                 print('epoch', epoch)
                 print('invalids', len(invalids))
                 logging.info("EVAL: epoch {}".format(epoch))
@@ -701,7 +701,7 @@ def eval(rank, args, shared_model):
         # checkpoint if best val loss
         if metrics.metrics[8][0] > best_eval_acc:  # d_D_50
             best_eval_acc = metrics.metrics[8][0]
-            if epoch % args.eval_every == 0 and args.to_log == 1:
+            if epoch % args.eval_every == 0 and args.log == True:
                 metrics.dump_log()
 
                 model_state = get_state(model)
@@ -789,7 +789,7 @@ def train(rank, args, shared_model):
         'split': 'train',
         'max_threads_per_gpu': args.max_threads_per_gpu,
         'gpu_id': args.gpus[rank % len(args.gpus)],
-        'to_cache': args.to_cache,
+        'to_cache': args.cache,
         'overfit': args.overfit,
         'max_controller_actions': args.max_controller_actions,
         'max_actions': args.max_actions
@@ -867,7 +867,7 @@ def train(rank, args, shared_model):
                     if t % args.print_every == 0:
                         print(metrics.get_stat_string())
                         logging.info("TRAIN: metrics: {}".format(metrics.get_stat_string()))
-                        if args.to_log == 1:
+                        if args.log == True:
                             metrics.dump_log()
 
                     print('[CHECK][Cache:%d][Total:%d]' %
@@ -880,7 +880,7 @@ def train(rank, args, shared_model):
                     train_loader.dataset._load_envs(in_order=True)
                     if len(train_loader.dataset.pruned_env_set) == 0:
                         done = True
-                        if args.to_cache == False:
+                        if args.cache == False:
                             train_loader.dataset._load_envs(
                                 start_idx=0, in_order=True)
                 else:
@@ -964,7 +964,7 @@ def train(rank, args, shared_model):
                     if t % args.print_every == 0:
                         print(metrics.get_stat_string())
                         logging.info("TRAIN: metrics: {}".format(metrics.get_stat_string()))
-                        if args.to_log == 1:
+                        if args.log == True:
                             metrics.dump_log()
 
                     print('[CHECK][Cache:%d][Total:%d]' %
@@ -978,7 +978,7 @@ def train(rank, args, shared_model):
                     train_loader.dataset._load_envs(in_order=True)
                     if len(train_loader.dataset.pruned_env_set) == 0:
                         done = True
-                        if args.to_cache == False:
+                        if args.cache == False:
                             train_loader.dataset._load_envs(
                                 start_idx=0, in_order=True)
                 else:
@@ -1094,7 +1094,7 @@ def train(rank, args, shared_model):
                     if t % args.print_every == 0:
                         print(metrics.get_stat_string())
                         logging.info("TRAIN: metrics: {}".format(metrics.get_stat_string()))
-                        if args.to_log == 1:
+                        if args.log == True:
                             metrics.dump_log()
 
                     print('[CHECK][Cache:%d][Total:%d]' %
@@ -1107,7 +1107,7 @@ def train(rank, args, shared_model):
                     train_loader.dataset._load_envs(in_order=True)
                     if len(train_loader.dataset.pruned_env_set) == 0:
                         done = True
-                        if args.to_cache == False:
+                        if args.cache == False:
                             train_loader.dataset._load_envs(
                                 start_idx=0, in_order=True)
                 else:
@@ -1126,9 +1126,9 @@ def train(rank, args, shared_model):
                 if i[0] != '_':
                     ad[i] = aad[i]
 
-            checkpoint = {'args': ad, 
-                          'state': model_state, 
-                          'epoch': epoch, 
+            checkpoint = {'args': ad,
+                          'state': model_state,
+                          'epoch': epoch,
                           'optimizer': optimizer_state}
 
             checkpoint_path = '%s/epoch_%d_thread_%d.pt' % (
@@ -1141,11 +1141,11 @@ def train(rank, args, shared_model):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # data params
-    parser.add_argument('-train_h5', default='data/05_06/train.h5')
-    parser.add_argument('-val_h5', default='data/05_06/val.h5')
-    parser.add_argument('-test_h5', default='data/05_06/test.h5')
-    parser.add_argument('-data_json', default='data/05_06/data.json')
-    parser.add_argument('-vocab_json', default='data/05_06/vocab.json')
+    parser.add_argument('-train_h5', default='data/train.h5')
+    parser.add_argument('-val_h5', default='data/val.h5')
+    parser.add_argument('-test_h5', default='data/test.h5')
+    parser.add_argument('-data_json', default='data/data.json')
+    parser.add_argument('-vocab_json', default='data/vocab.json')
 
     parser.add_argument(
         '-target_obj_conn_map_dir',
@@ -1183,10 +1183,10 @@ if __name__ == '__main__':
 
     # checkpointing
     parser.add_argument('-checkpoint_path', default=False)
-    parser.add_argument('-checkpoint_dir', default='checkpoints/05_06/nav/')
-    parser.add_argument('-log_dir', default='logs/05_06/nav/')
-    parser.add_argument('-to_log', default=0, type=int)
-    parser.add_argument('-to_cache', action='store_true')
+    parser.add_argument('-checkpoint_dir', default='checkpoints/nav/')
+    parser.add_argument('-log_dir', default='logs/nav/')
+    parser.add_argument('-log', default=False, action='store_true')
+    parser.add_argument('-cache', default=False, action='store_true')
     parser.add_argument('-max_controller_actions', type=int, default=5)
     parser.add_argument('-max_actions', type=int)
     args = parser.parse_args()
@@ -1303,10 +1303,10 @@ if __name__ == '__main__':
                 p = mp.Process(target=train, args=(rank, args, shared_model))
                 p.start()
                 processes.append(p)
-    
+
             for p in processes:
                 p.join()
- 
+
         else:
             train(0, args, shared_model)
 

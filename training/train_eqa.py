@@ -54,7 +54,9 @@ def eval(rank, args, shared_nav_model, shared_ans_model):
         'split': args.eval_split,
         'max_threads_per_gpu': args.max_threads_per_gpu,
         'gpu_id': args.gpus[rank % len(args.gpus)],
-        'to_cache': False
+        'to_cache': False,
+        'max_controller_actions': args.max_controller_actions,
+        'max_actions': args.max_actions
     }
 
     eval_loader = EqaDataLoader(**eval_loader_kwargs)
@@ -135,8 +137,14 @@ def eval(rank, args, shared_nav_model, shared_ans_model):
                             1)
 
                         # forward through planner till spawn
-                        planner_actions_in, planner_img_feats, controller_step, controller_action_in, controller_img_feat, init_pos = eval_loader.dataset.get_hierarchical_features_till_spawn(
-                            actions[0, :action_length[0] + 1].numpy(), i)
+                        (
+                            planner_actions_in, planner_img_feats,
+                            controller_step, controller_action_in,
+                            controller_img_feat, init_pos,
+                            controller_action_counter
+                        ) = eval_loader.dataset.get_hierarchical_features_till_spawn(
+                            actions[0, :action_length[0] + 1].numpy(), i, args.max_controller_actions
+                        )
 
                         planner_actions_in_var = Variable(
                             planner_actions_in.cuda())
@@ -369,7 +377,7 @@ def eval(rank, args, shared_nav_model, shared_ans_model):
         # checkpoint if best val accuracy
         if vqa_metrics.metrics[2][0] > best_eval_acc:  # ans_acc_50
             best_eval_acc = vqa_metrics.metrics[2][0]
-            if epoch % args.eval_every == 0 and args.to_log == 1:
+            if epoch % args.eval_every == 0 and args.log == True:
                 vqa_metrics.dump_log()
                 nav_metrics.dump_log()
 
@@ -425,7 +433,9 @@ def train(rank, args, shared_nav_model, shared_ans_model):
         'split': 'train',
         'max_threads_per_gpu': args.max_threads_per_gpu,
         'gpu_id': args.gpus[rank % len(args.gpus)],
-        'to_cache': args.to_cache
+        'to_cache': args.cache,
+        'max_controller_actions': args.max_controller_actions,
+        'max_actions': args.max_actions
     }
 
     args.output_nav_log_path = os.path.join(args.log_dir,
@@ -499,9 +509,14 @@ def train(rank, args, shared_nav_model, shared_ans_model):
                     planner_hidden = nav_model.planner_nav_rnn.init_hidden(1)
 
                     # forward through planner till spawn
-                    planner_actions_in, planner_img_feats, controller_step, controller_action_in, controller_img_feat, init_pos = train_loader.dataset.get_hierarchical_features_till_spawn(
-                        actions[0, :action_length[0] + 1].numpy(),
-                        max(3, int(mult * action_length[0])))
+                    (
+                        planner_actions_in, planner_img_feats,
+                        controller_step, controller_action_in,
+                        controller_img_feat, init_pos,
+                        controller_action_counter
+                    ) = train_loader.dataset.get_hierarchical_features_till_spawn(
+                        actions[0, :action_length[0] + 1].numpy(), max(3, int(mult * action_length[0])), args.max_controller_actions
+                    )
 
                     planner_actions_in_var = Variable(
                         planner_actions_in.cuda())
@@ -725,7 +740,7 @@ def train(rank, args, shared_nav_model, shared_ans_model):
                         ])
 
                         print(nav_metrics.get_stat_string())
-                        if args.to_log == 1:
+                        if args.log == True:
                             nav_metrics.dump_log()
 
                         if nav_metrics.metrics[2][1] > 0.35:
@@ -737,7 +752,7 @@ def train(rank, args, shared_nav_model, shared_ans_model):
                     train_loader.dataset._load_envs(in_order=True)
                     if len(train_loader.dataset.pruned_env_set) == 0:
                         done = True
-                        if args.to_cache == False:
+                        if args.cache == False:
                             train_loader.dataset._load_envs(
                                 start_idx=0, in_order=True)
                 else:
@@ -792,8 +807,10 @@ if __name__ == '__main__':
 
     parser.add_argument('-checkpoint_dir', default='checkpoints/eqa/')
     parser.add_argument('-log_dir', default='logs/eqa/')
-    parser.add_argument('-to_log', default=0, type=int)
-    parser.add_argument('-to_cache', action='store_true')
+    parser.add_argument('-log', default=False, action='store_true')
+    parser.add_argument('-cache', default=False, action='store_true')
+    parser.add_argument('-max_controller_actions', type=int, default=5)
+    parser.add_argument('-max_actions', type=int)
     args = parser.parse_args()
 
     args.time_id = time.strftime("%m_%d_%H:%M")
@@ -806,26 +823,28 @@ if __name__ == '__main__':
         exit()
 
     # Load navigation model
-    print('Loading navigation checkpoint from %s' % args.nav_checkpoint_path)
-    checkpoint = torch.load(
-        args.nav_checkpoint_path, map_location={
-            'cuda:0': 'cpu'
-        })
+    if args.nav_checkpoint_path != False:
+        print('Loading navigation checkpoint from %s' % args.nav_checkpoint_path)
+        checkpoint = torch.load(
+            args.nav_checkpoint_path, map_location={
+                'cuda:0': 'cpu'
+            })
 
-    args_to_keep = ['model_type']
+        args_to_keep = ['model_type']
 
-    for i in args.__dict__:
-        if i not in args_to_keep:
-            checkpoint['args'][i] = args.__dict__[i]
+        for i in args.__dict__:
+            if i not in args_to_keep:
+                checkpoint['args'][i] = args.__dict__[i]
 
-    args = type('new_dict', (object, ), checkpoint['args'])
+        args = type('new_dict', (object, ), checkpoint['args'])
+
     args.checkpoint_dir = os.path.join(args.checkpoint_dir,
                                        args.time_id + '_' + args.identifier)
     args.log_dir = os.path.join(args.log_dir,
                                 args.time_id + '_' + args.identifier)
     print(args.__dict__)
 
-    if not os.path.exists(args.checkpoint_dir) and args.to_log == 1:
+    if not os.path.exists(args.checkpoint_dir) and args.log == True:
         os.makedirs(args.checkpoint_dir)
         os.makedirs(args.log_dir)
 
@@ -840,24 +859,27 @@ if __name__ == '__main__':
 
     shared_nav_model.share_memory()
 
-    print('Loading navigation params from checkpoint: %s' %
-          args.nav_checkpoint_path)
-    shared_nav_model.load_state_dict(checkpoint['state'])
+    if args.nav_checkpoint_path != False:
+        print('Loading navigation params from checkpoint: %s' %
+            args.nav_checkpoint_path)
+        shared_nav_model.load_state_dict(checkpoint['state'])
 
     # Load answering model
-    print('Loading answering checkpoint from %s' % args.ans_checkpoint_path)
-    ans_checkpoint = torch.load(
-        args.ans_checkpoint_path, map_location={
-            'cuda:0': 'cpu'
-        })
+    if args.ans_checkpoint_path != False:
+        print('Loading answering checkpoint from %s' % args.ans_checkpoint_path)
+        ans_checkpoint = torch.load(
+            args.ans_checkpoint_path, map_location={
+                'cuda:0': 'cpu'
+            })
 
     ans_model_kwargs = {'vocab': load_vocab(args.vocab_json)}
     shared_ans_model = VqaLstmCnnAttentionModel(**ans_model_kwargs)
 
     shared_ans_model.share_memory()
 
-    print('Loading params from checkpoint: %s' % args.ans_checkpoint_path)
-    shared_ans_model.load_state_dict(ans_checkpoint['state'])
+    if args.ans_checkpoint_path != False:
+        print('Loading params from checkpoint: %s' % args.ans_checkpoint_path)
+        shared_ans_model.load_state_dict(ans_checkpoint['state'])
 
     if args.mode == 'eval':
 
