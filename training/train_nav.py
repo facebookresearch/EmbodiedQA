@@ -721,7 +721,7 @@ def eval(rank, args, shared_model):
                 torch.save(checkpoint, checkpoint_path)
 
         print('[best_eval_d_D_50:%.04f]' % best_eval_acc)
-        logging.info("EVAL: [best_eval_d_D_50:{.04f}]".format(best_eval_acc))
+        logging.info("EVAL: [best_eval_d_D_50:{:.04f}]".format(best_eval_acc))
 
         eval_loader.dataset._load_envs(start_idx=0, in_order=True)
 
