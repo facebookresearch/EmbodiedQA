@@ -8,7 +8,7 @@ numpy==1.14.4
 opencv-python==3.4.1.15
 Pillow==5.1.0
 pyglet==1.3.2
-requests==2.18.4
+requests==2.31.0
 scipy==1.1.0
 six==1.11.0
 torch==0.3.1
