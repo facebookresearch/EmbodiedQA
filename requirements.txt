@@ -1,6 +1,6 @@
 certifi==2018.4.16
 chardet==3.0.4
-future==0.16.0
+future==0.18.3
 gym==0.10.5
 h5py==2.8.0
 idna==2.6
